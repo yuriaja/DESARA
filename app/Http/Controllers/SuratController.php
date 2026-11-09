@@ -67,7 +67,21 @@ class SuratController extends Controller
 
     public function showPdf($id)
     {
-        $surat = Surat::findOrFail($id);
+        $surat = Surat::with('jenisSurat')->findOrFail($id);
+
+        $kode = $surat->jenisSurat?->kode_surat;
+
+        if ($kode === 'KEM') {
+            $pdf = \App\Services\KematianPdf::make($surat);
+            $namaFile = 'surat-kematian-' . \Illuminate\Support\Str::slug($surat->nama_pemohon) . '.pdf';
+
+            return request()->boolean('unduh') ? $pdf->download($namaFile) : $pdf->stream($namaFile);
+        }
+
+        // Template PDF backend baru ada untuk Surat Keterangan dan Surat Kematian
+        if ($kode !== 'KET') {
+            abort(404, 'Template PDF untuk jenis surat ini belum tersedia.');
+        }
 
         $data = [
             'nomor_surat' => $surat->nomor_surat,
@@ -115,5 +129,59 @@ class SuratController extends Controller
         $pdf = Pdf::loadView('surat.keterangan', $data);
 
         return $pdf->stream('test-surat-keterangan.pdf');
+    }
+        public function apiStoreKeterangan(Request $request)
+    {
+        $validated = $request->validate([
+            'nama' => 'required|string|max:255',
+            'nik' => 'required|digits:16',
+            'tempatLahir' => 'nullable|string',
+            'tanggalLahir' => 'nullable|date',
+            'pekerjaan' => 'nullable|string',
+            'agama' => 'nullable|string',
+            'statusKawin' => 'nullable|string',
+            'jenisKelamin' => 'nullable|string',
+            'alamat' => 'required|string',
+            'isiKeterangan' => 'nullable|string',
+            'keperluan' => 'nullable|string',
+            'masaMulai' => 'nullable|date',
+            'masaSelesai' => 'nullable|date',
+        ]);
+
+        $jenisSurat = JenisSurat::where('kode_surat', 'KET')->first();
+
+        $lastSurat = Surat::where('jenis_surat_id', $jenisSurat->id)->latest('id')->first();
+        $nomorUrut = $lastSurat ? ((int) preg_replace('/[^0-9]/', '', explode('/', $lastSurat->nomor_surat)[1] ?? 0) + 1) : 1;
+        $nomorSurat = "474.4/{$nomorUrut}/403.408.4/2026";
+
+        $surat = Surat::create([
+            'user_id' => 1,
+            'jenis_surat_id' => $jenisSurat->id,
+            'nomor_surat' => $nomorSurat,
+            'nama_pemohon' => $validated['nama'],
+            'nik_pemohon' => $validated['nik'],
+            'tempat_lahir' => $validated['tempatLahir'],
+            'tanggal_lahir' => $validated['tanggalLahir'],
+            'pekerjaan' => $validated['pekerjaan'],
+            'agama' => $validated['agama'],
+            'status_perkawinan' => $validated['statusKawin'],
+            'jenis_kelamin' => $validated['jenisKelamin'],
+            'alamat_pemohon' => $validated['alamat'],
+            'data_tambahan' => [
+                'keterangan' => $validated['isiKeterangan'],
+                'keperluan' => $validated['keperluan'],
+                'masa_mulai' => $validated['masaMulai'],
+                'masa_selesai' => $validated['masaSelesai'],
+            ],
+            'tanggal_terbit' => now(),
+            'status_arsip' => 'aktif',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'nomor_surat' => $surat->nomor_surat,
+            'id' => $surat->id,
+            'pdf_url' => "/surat/{$surat->id}/pdf",
+        ]);
     }
 }

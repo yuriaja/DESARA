@@ -1,0 +1,3 @@
+@extends('layanan.layout')
+@section('title','Masuk')
+@section('content')<div class="card auth"><h1>Masuk ke DESARA</h1><p class="muted">Gunakan akun warga atau akun petugas desa.</p><form method="post" action="{{route('layanan.login.post')}}">@csrf<label>Email</label><input type="email" name="email" value="{{old('email')}}" required autocomplete="username"><label>Kata sandi</label><input type="password" name="password" required autocomplete="current-password"><p><button class="btn">Masuk</button></p></form><a href="{{route('layanan.register')}}">Belum punya akun? Daftar sebagai warga</a></div>@endsection
