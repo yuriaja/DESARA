@@ -88,7 +88,7 @@
         ->translatedFormat('d F Y');
 
     // Belum ada identitas pejabat penandatangan.
-    $namaKepalaDesa = null;
+    $namaKepalaDesa = $pengajuan->nama_kepala_desa ?? null;
 
     // LABEL DINAMIS BERDASARKAN JENIS SURAT
     $konfigurasi = config('desara_kependudukan', []);
@@ -321,7 +321,7 @@
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
-            margin-top: 11px;
+            margin-top: 30px;
             page-break-inside: avoid;
         }
 
@@ -343,7 +343,7 @@
         }
 
         .ruang-ttd {
-            height: 34px;
+            height: 65px;
         }
 
         .nama-kades {
@@ -511,8 +511,7 @@
     <div class="bagian-akhir">
 
         <p class="penutup">
-            Demikian surat keterangan ini dibuat
-            untuk digunakan sebagaimana mestinya.
+            Demikian surat keterangan ini dibuat dengan sebenar-benarnya berdasarkan data dan keterangan yang telah disampaikan serta diperiksa sebagaimana mestinya. Surat ini diberikan kepada yang bersangkutan untuk dipergunakan sesuai dengan keperluan yang telah dinyatakan. Atas perhatian dan kerja sama dari pihak-pihak terkait, kami mengucapkan terima kasih.
         </p>
 
         <table class="ttd-table">
@@ -536,12 +535,6 @@
                 </td>
             </tr>
         </table>
-
-        <div class="catatan-draft">
-            DRAFT PEMERIKSAAN DESARA —
-            BELUM MERUPAKAN SURAT RESMI
-        </div>
-
     </div>
 
 </body>

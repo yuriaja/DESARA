@@ -72,6 +72,31 @@
 
 
 <style>
+    .history-reason {
+        display: block;
+        max-width: 240px;
+        color: #a12828;
+        font-size: 13px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+    }
+
+    .history-edit-btn {
+        display: inline-block;
+        padding: 10px 15px;
+        border-radius: 9px;
+        background: #206b4c;
+        color: #ffffff !important;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .history-edit-btn:hover {
+        background: #174e37;
+    }
+
     .history-page {
         max-width: 1200px;
         margin: 0 auto;
@@ -99,7 +124,7 @@
 
     .history-table {
         width: 100%;
-        min-width: 650px;
+        min-width: 950px;
         border-collapse: collapse;
     }
 
@@ -215,6 +240,8 @@
                     <th>Jenis Surat</th>
                     <th>Tanggal</th>
                     <th>Status</th>
+                    <th>Alasan Penolakan</th>
+                    <th>Aksi</th>
                 </tr>
             </thead>
 
@@ -259,19 +286,44 @@
                                 ? $p->created_at->format('d/m/Y H:i')
                                 : '-' }}
                         </td>
-
+                        
+                       {{-- STATUS --}}
                         <td>
                             <span class="history-status {{ $statusClass }}">
                                 {{ $status }}
                             </span>
                         </td>
 
+                        {{-- ALASAN PENOLAKAN --}}
+                        <td>
+                            @if($p->status === 'Ditolak')
+                                <span class="history-reason">
+                                    {{ $p->catatan_petugas ?: 'Alasan belum tersedia.' }}
+                                </span>
+                            @else
+                                <span style="color:#a0aaa4;">—</span>
+                            @endif
+                        </td>
+
+                        {{-- AKSI --}}
+                        <td>
+                            @if($p->status === 'Ditolak')
+                                <a
+                                    href="{{ route('warga.kependudukan.edit', $p) }}"
+                                    class="history-edit-btn"
+                                >
+                                    <span>✎</span> Perbaiki
+                                </a>
+                            @else
+                                <span style="color:#a0aaa4;">—</span>
+                            @endif
+                        </td>
                     </tr>
 
                 @empty
 
                     <tr>
-                        <td colspan="4" class="history-empty">
+                        <td colspan="6" class="history-empty">
                             Belum ada pengajuan surat.
                         </td>
                     </tr>

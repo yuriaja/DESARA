@@ -17,6 +17,8 @@ class PengajuanSuratKependudukan extends Model
         'dokumen',
         'status',
         'catatan_petugas',
+        'nomor_surat',
+        'nama_kepala_desa',
     ];
 
     protected function casts(): array

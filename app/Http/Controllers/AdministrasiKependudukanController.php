@@ -22,7 +22,7 @@ class AdministrasiKependudukanController extends Controller
     {
         abort_unless(
             $request->user()
-            && $request->user()->role === 'admin',
+                && $request->user()->role === 'admin',
             403,
             'Akses hanya untuk admin.'
         );
@@ -32,7 +32,6 @@ class AdministrasiKependudukanController extends Controller
     |--------------------------------------------------------------------------
     | 1. PENGAJUAN WARGA
     |--------------------------------------------------------------------------
-    | Menampilkan surat yang masih dalam antrean.
     */
 
     public function index(Request $request)
@@ -56,8 +55,6 @@ class AdministrasiKependudukanController extends Controller
     |--------------------------------------------------------------------------
     | 2. REKAP ADMINISTRASI
     |--------------------------------------------------------------------------
-    | Tab proses dan selesai.
-    | Surat dikelompokkan berdasarkan tanggal masuk.
     */
 
     public function rekap(Request $request)
@@ -86,9 +83,7 @@ class AdministrasiKependudukanController extends Controller
 
         if ($tanggal) {
             $request->validate([
-                'tanggal' => [
-                    'date_format:Y-m-d',
-                ],
+                'tanggal' => ['date_format:Y-m-d'],
             ]);
 
             $query->whereDate('created_at', $tanggal);
@@ -114,20 +109,22 @@ class AdministrasiKependudukanController extends Controller
             ])
             ->count();
 
-        return view('layanan.rekap-administrasi', compact(
-            'tab',
-            'tanggal',
-            'kelompokTanggal',
-            'jumlahProses',
-            'jumlahSelesai'
-        ));
+        return view(
+            'layanan.rekap-administrasi',
+            compact(
+                'tab',
+                'tanggal',
+                'kelompokTanggal',
+                'jumlahProses',
+                'jumlahSelesai'
+            )
+        );
     }
 
     /*
     |--------------------------------------------------------------------------
     | 3. DETAIL PENGAJUAN
     |--------------------------------------------------------------------------
-    | Menampilkan data pemohon, data surat, dan lampiran.
     */
 
     public function detail(
@@ -136,18 +133,27 @@ class AdministrasiKependudukanController extends Controller
     ) {
         $this->admin($request);
 
-        return view('layanan.detail-administrasi', compact(
-            'pengajuan'
-        ));
+        return view(
+            'layanan.detail-administrasi',
+            compact('pengajuan')
+        );
     }
 
     /*
     |--------------------------------------------------------------------------
     | 4. KEPUTUSAN ADMIN
     |--------------------------------------------------------------------------
-    | terima      = Dalam Antrian -> Proses
-    | tolak       = Dalam Antrian / Proses -> Ditolak
-    | selesaikan  = Proses -> Selesai
+    |
+    | terima:
+    | Dalam Antrian / Diajukan -> Proses
+    |
+    | tolak:
+    | Dalam Antrian / Diajukan / Proses -> Ditolak
+    |
+    | selesaikan:
+    | Proses -> Selesai
+    | Wajib mengisi nomor surat dan nama kepala desa.
+    |
     */
 
     public function keputusan(
@@ -175,9 +181,36 @@ class AdministrasiKependudukanController extends Controller
                 'min:5',
                 'max:2000',
             ],
+
+            'nomor_surat' => [
+                Rule::requiredIf(
+                    $request->input('aksi') === 'selesaikan'
+                ),
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'nama_kepala_desa' => [
+                Rule::requiredIf(
+                    $request->input('aksi') === 'selesaikan'
+                ),
+                'nullable',
+                'string',
+                'max:150',
+            ],
+        ], [
+            'nomor_surat.required' =>
+                'Nomor surat wajib diisi sebelum surat diselesaikan.',
+
+            'nama_kepala_desa.required' =>
+                'Nama kepala desa wajib diisi sebelum surat diselesaikan.',
+
+            'alasan.required' =>
+                'Alasan penolakan wajib diisi.',
         ]);
 
-        DB::transaction(function () use (
+        $pesan = DB::transaction(function () use (
             $pengajuan,
             $validated
         ) {
@@ -189,7 +222,12 @@ class AdministrasiKependudukanController extends Controller
             $status = $data->status;
             $aksi = $validated['aksi'];
 
-            // MENYETUJUI PENGAJUAN AWAL
+            /*
+            |--------------------------------------------------------------------------
+            | A. TERIMA PENGAJUAN AWAL
+            |--------------------------------------------------------------------------
+            */
+
             if ($aksi === 'terima') {
 
                 if (!in_array(
@@ -198,15 +236,25 @@ class AdministrasiKependudukanController extends Controller
                     true
                 )) {
                     throw ValidationException::withMessages([
-                        'aksi' => 'Surat ini sudah tidak dalam antrean.',
+                        'aksi' =>
+                            'Surat ini sudah tidak berada dalam antrean.',
                     ]);
                 }
 
                 $data->status = 'Proses';
                 $data->catatan_petugas = null;
+
+                $data->save();
+
+                return 'Pengajuan berhasil diterima dan masuk ke proses pengecekan.';
             }
 
-            // MENOLAK PENGAJUAN
+            /*
+            |--------------------------------------------------------------------------
+            | B. TOLAK PENGAJUAN
+            |--------------------------------------------------------------------------
+            */
+
             if ($aksi === 'tolak') {
 
                 if (!in_array(
@@ -219,7 +267,8 @@ class AdministrasiKependudukanController extends Controller
                     true
                 )) {
                     throw ValidationException::withMessages([
-                        'aksi' => 'Surat tidak dapat ditolak pada status ini.',
+                        'aksi' =>
+                            'Surat tidak dapat ditolak pada status ini.',
                     ]);
                 }
 
@@ -228,98 +277,166 @@ class AdministrasiKependudukanController extends Controller
                 $data->catatan_petugas = trim(
                     $validated['alasan']
                 );
+
+                // Surat ditolak tidak boleh membawa
+                // identitas penerbitan sebelumnya.
+                $data->nomor_surat = null;
+                $data->nama_kepala_desa = null;
+
+                $data->save();
+
+                return 'Pengajuan berhasil ditolak dan alasan penolakan telah disimpan.';
             }
 
-            // MENYELESAIKAN PENGAJUAN
+            /*
+            |--------------------------------------------------------------------------
+            | C. SELESAIKAN PENGAJUAN
+            |--------------------------------------------------------------------------
+            */
+
             if ($aksi === 'selesaikan') {
 
                 if ($status !== 'Proses') {
                     throw ValidationException::withMessages([
-                        'aksi' => 'Surat harus dalam proses pengecekan terlebih dahulu.',
+                        'aksi' =>
+                            'Surat harus dalam proses pengecekan terlebih dahulu.',
                     ]);
                 }
 
+                $nomorSurat = trim(
+                    $validated['nomor_surat']
+                );
+
+                $namaKepalaDesa = trim(
+                    $validated['nama_kepala_desa']
+                );
+
+                if ($nomorSurat === '') {
+                    throw ValidationException::withMessages([
+                        'nomor_surat' =>
+                            'Nomor surat tidak boleh kosong.',
+                    ]);
+                }
+
+                if ($namaKepalaDesa === '') {
+                    throw ValidationException::withMessages([
+                        'nama_kepala_desa' =>
+                            'Nama kepala desa tidak boleh kosong.',
+                    ]);
+                }
+
+                // Periksa nomor surat agar tidak dipakai
+                // pada pengajuan selesai lainnya.
+                $nomorSudahDipakai =
+                    PengajuanSuratKependudukan::query()
+                        ->where('nomor_surat', $nomorSurat)
+                        ->where('id', '!=', $data->id)
+                        ->where('status', 'Selesai')
+                        ->exists();
+
+                if ($nomorSudahDipakai) {
+                    throw ValidationException::withMessages([
+                        'nomor_surat' =>
+                            'Nomor surat sudah digunakan pada pengajuan lain.',
+                    ]);
+                }
+
+                $data->nomor_surat = $nomorSurat;
+                $data->nama_kepala_desa = $namaKepalaDesa;
+
                 $data->status = 'Selesai';
                 $data->catatan_petugas = null;
+
+                $data->save();
+
+                return 'Surat berhasil diselesaikan. Nomor surat dan nama kepala desa telah disimpan.';
             }
 
-            $data->save();
+            throw ValidationException::withMessages([
+                'aksi' => 'Aksi tidak dikenali.',
+            ]);
         });
 
-        return back()->with(
-            'success',
-            'Status pengajuan #' . $pengajuan->id .
-            ' berhasil diperbarui.'
-        );
+        return back()->with('success', $pesan);
     }
 
     /*
     |--------------------------------------------------------------------------
     | 5. LIHAT LAMPIRAN DOKUMEN
     |--------------------------------------------------------------------------
-    | Menampilkan JPG, PNG, atau PDF di browser.
-    | Akses hanya diberikan kepada admin yang login.
+    | Penyimpanan tetap privat.
+    | Hanya admin login yang dapat mengakses.
     */
 
-    
+    public function lampiran(
+        Request $request,
+        PengajuanSuratKependudukan $pengajuan,
+        string $kode
+    ) {
+        $this->admin($request);
 
-public function lampiran(
-    Request $request,
-    PengajuanSuratKependudukan $pengajuan,
-    string $kode
-) {
-    $this->admin($request);
+        $dokumen = $pengajuan->dokumen ?? [];
 
-    $dokumen = $pengajuan->dokumen ?? [];
+        if (is_string($dokumen)) {
+            $dokumen = json_decode($dokumen, true) ?: [];
+        }
 
-    if (is_string($dokumen)) {
-        $dokumen = json_decode($dokumen, true) ?: [];
+        abort_unless(is_array($dokumen), 404);
+
+        $path = $dokumen[$kode] ?? null;
+
+        abort_unless(
+            is_string($path) && $path !== '',
+            404,
+            'Dokumen tidak ditemukan.'
+        );
+
+        $folder = 'kependudukan/' . $pengajuan->id . '/';
+
+        abort_unless(
+            str_starts_with($path, $folder)
+                && !str_contains($path, '..')
+                && !str_contains($path, '\\'),
+            403,
+            'Path dokumen tidak valid.'
+        );
+
+        $disk = Storage::disk('local');
+
+        abort_unless(
+            $disk->exists($path),
+            404,
+            'File tidak ditemukan.'
+        );
+
+        $fullPath = $disk->path($path);
+
+        $mime = mime_content_type($fullPath);
+
+        abort_unless(
+            in_array($mime, [
+                'image/jpeg',
+                'image/png',
+                'application/pdf',
+            ], true),
+            415,
+            'Format dokumen tidak didukung.'
+        );
+
+        return response()->file($fullPath, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline',
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
-
-    $path = $dokumen[$kode] ?? null;
-
-    abort_unless(is_string($path) && $path !== '', 404);
-
-    $folder = 'kependudukan/' . $pengajuan->id . '/';
-
-    abort_unless(
-        str_starts_with($path, $folder)
-        && !str_contains($path, '..')
-        && !str_contains($path, '\\'),
-        403
-    );
-
-    $disk = Storage::disk('local');
-
-    abort_unless($disk->exists($path), 404);
-
-    $fullPath = $disk->path($path);
-    $mime = mime_content_type($fullPath);
-
-    abort_unless(
-        in_array($mime, [
-            'image/jpeg',
-            'image/png',
-            'application/pdf'
-        ], true),
-        415
-    );
-
-    return response()->file($fullPath, [
-        'Content-Type' => $mime,
-        'Content-Disposition' => 'inline',
-        'Cache-Control' => 'private, no-store',
-        'X-Content-Type-Options' => 'nosniff',
-    ]);
-}
-
 
     /*
     |--------------------------------------------------------------------------
     | 6. PDF SURAT
     |--------------------------------------------------------------------------
-    | Default: buka PDF di browser.
-    | ?download=1: unduh PDF.
+    | Proses  = PDF pemeriksaan
+    | Selesai = PDF dengan nomor surat dan kepala desa
     */
 
     public function pdf(
@@ -348,12 +465,10 @@ public function lampiran(
         $namaFile = 'SURAT-DESARA-' .
             $pengajuan->id . '.pdf';
 
-        // Download jika terdapat ?download=1.
         if ($request->query('download') === '1') {
             return $pdf->download($namaFile);
         }
 
-        // Tampilkan PDF di browser.
         return $pdf->stream($namaFile);
     }
 }

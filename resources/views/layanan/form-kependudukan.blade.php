@@ -7,11 +7,51 @@
     $uploads = $layanan['docs'] ?? $layanan['uploads'] ?? [];
 
     $user = auth()->user();
-    $namaUser = $user?->name ?? '';
     $emailUser = $user?->email ?? '';
+
+    // Mode perbaikan pengajuan ditolak
+    $isEdit = isset($pengajuan) && $pengajuan !== null;
+
+    $dataPemohonLama = $isEdit
+        ? ($pengajuan->data_pemohon ?? [])
+        : [];
+
+    $dataSuratLama = $isEdit
+        ? ($pengajuan->data_surat ?? [])
+        : [];
+
+    $dokumenLama = $isEdit
+        ? ($pengajuan->dokumen ?? [])
+        : [];
+
+    // Antisipasi jika model belum menggunakan cast array.
+    foreach ([
+        'dataPemohonLama',
+        'dataSuratLama',
+        'dokumenLama'
+    ] as $variabel) {
+        if (is_string($$variabel)) {
+            $$variabel = json_decode($$variabel, true) ?: [];
+        }
+
+        if (!is_array($$variabel)) {
+            $$variabel = [];
+        }
+    }
+
+    $nilaiPemohon = function ($key, $default = '') use ($dataPemohonLama) {
+        return old(
+            $key,
+            $dataPemohonLama[$key] ?? $default
+        );
+    };
+
+    $actionForm = $isEdit
+        ? route('warga.kependudukan.update', $pengajuan)
+        : route('warga.kependudukan.store', ['jenis' => $jenis]);
 @endphp
 
-@section('title', $namaSurat)
+@section('title', $isEdit ? 'Perbaiki ' . $namaSurat : $namaSurat)
 
 @section('content')
 
@@ -32,8 +72,19 @@
         color: #173e30;
     }
 
-    .form-kependudukan .form-header {
+    .form-header {
         margin-bottom: 24px;
+    }
+
+    .form-header h1 {
+        margin-bottom: 9px;
+        font-size: 30px;
+        line-height: 1.3;
+    }
+
+    .form-header p {
+        color: #61746a;
+        line-height: 1.7;
     }
 
     .form-kependudukan .form-notice {
@@ -62,6 +113,31 @@
         background: #fff2f2;
         border: 1px solid #e8bbbb;
         color: #982b2b;
+    }
+
+    .form-kependudukan .alert-error ul {
+        margin-top: 10px;
+        padding-left: 23px;
+    }
+
+    .form-kependudukan .revisi-notice {
+        padding: 20px;
+        border-radius: 14px;
+        background: #fff8eb;
+        border: 1px solid #efd7a8;
+        color: #76501c;
+        margin-bottom: 22px;
+        line-height: 1.7;
+    }
+
+    .form-kependudukan .revisi-notice strong {
+        display: block;
+        font-size: 17px;
+        margin-bottom: 8px;
+    }
+
+    .form-kependudukan .revisi-notice p {
+        margin: 5px 0;
     }
 
     .form-kependudukan .step-indicator {
@@ -157,6 +233,7 @@
 
     .form-kependudukan .help-text {
         margin-top: 7px;
+        line-height: 1.6;
     }
 
     .form-kependudukan .upload-box {
@@ -165,6 +242,22 @@
         background: #f8fbf8;
         border-radius: 12px;
         margin-bottom: 18px;
+    }
+
+    .form-kependudukan .upload-existing {
+        padding: 12px 14px;
+        margin-bottom: 14px;
+        background: #e8f5ed;
+        border: 1px solid #b9dec9;
+        border-radius: 9px;
+        color: #206b4c;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    .form-kependudukan .upload-existing strong {
+        display: block;
+        margin-bottom: 4px;
     }
 
     .form-kependudukan .file-preview {
@@ -275,7 +368,6 @@
         margin-bottom: 6px;
     }
 
-    /* CHECKBOX */
     .form-kependudukan .checkbox-row {
         display: flex;
         align-items: flex-start;
@@ -318,7 +410,6 @@
         font-size: 14px;
     }
 
-    /* POPUP */
     .desara-modal {
         position: fixed;
         inset: 0;
@@ -400,6 +491,10 @@
         .desara-modal-actions {
             flex-direction: column-reverse;
         }
+
+        .form-header h1 {
+            font-size: 25px;
+        }
     }
 </style>
 
@@ -414,23 +509,58 @@
         <a href="{{ url('/warga/kategori/1') }}">
             Administrasi Kependudukan
         </a>
-        / {{ $namaSurat }}
+        /
+        {{ $namaSurat }}
     </p>
 
     {{-- HEADER --}}
     <div class="form-header">
-        <h1>{{ $namaSurat }}</h1>
+        <h1>
+            {{ $isEdit ? 'Perbaiki Pengajuan' : $namaSurat }}
+        </h1>
 
-        <p class="muted">
-            Lengkapi formulir dan unggah dokumen
-            sesuai persyaratan surat.
+        <p>
+            @if($isEdit)
+                Perbaiki data yang belum sesuai agar pengajuan
+                dapat diperiksa kembali oleh petugas desa.
+            @else
+                Lengkapi formulir dan unggah dokumen
+                sesuai persyaratan surat.
+            @endif
         </p>
     </div>
+
+    {{-- INFORMASI PENOLAKAN --}}
+    @if($isEdit)
+        <div class="revisi-notice">
+            <strong>Pengajuan Perlu Diperbaiki</strong>
+
+            <p>
+                <b>Nomor Pengajuan:</b>
+                PGJ-{{ str_pad($pengajuan->id, 5, '0', STR_PAD_LEFT) }}
+            </p>
+
+            <p>
+                <b>Jenis Surat:</b> {{ $namaSurat }}
+            </p>
+
+            <p>
+                <b>Alasan Penolakan:</b>
+                {{ $pengajuan->catatan_petugas ?: 'Silakan periksa kembali data pengajuan.' }}
+            </p>
+
+            <p>
+                Seluruh jawaban sebelumnya sudah dimuat otomatis.
+                Perbaiki bagian yang salah dan kirim ulang.
+                Dokumen yang tidak diganti akan tetap tersimpan.
+            </p>
+        </div>
+    @endif
 
     {{-- NOTIFIKASI BERHASIL --}}
     @if(session('success'))
         <div class="form-alert alert-success" role="status">
-            <strong>✓ Pengajuan berhasil!</strong>
+            <strong>Pengajuan berhasil!</strong>
             <p>{{ session('success') }}</p>
         </div>
     @endif
@@ -438,7 +568,11 @@
     {{-- NOTIFIKASI GAGAL --}}
     @if($errors->any())
         <div class="form-alert alert-error" role="alert">
-            <strong>Pengajuan belum berhasil dikirim.</strong>
+            <strong>
+                {{ $isEdit
+                    ? 'Perbaikan belum berhasil disimpan.'
+                    : 'Pengajuan belum berhasil dikirim.' }}
+            </strong>
 
             <ul>
                 @foreach($errors->all() as $error)
@@ -446,16 +580,17 @@
                 @endforeach
             </ul>
 
-            <p>
-                Periksa kembali data yang diisi,
-                lalu kirim ulang pengajuan.
-            </p>
+            <p>Periksa kembali data yang diisi.</p>
         </div>
     @endif
 
-    {{-- INFORMASI --}}
+    {{-- INFORMASI FORM --}}
     <div class="form-notice">
-        <strong>📋 Formulir Pelayanan Administrasi</strong>
+        <strong>
+            {{ $isEdit
+                ? 'Formulir Perbaikan Administrasi'
+                : 'Formulir Pelayanan Administrasi' }}
+        </strong>
 
         <p>
             {{ $layanan['summary'] ?? 'Lengkapi data pengajuan dengan benar.' }}
@@ -475,19 +610,22 @@
         <span>4. Konfirmasi</span>
     </div>
 
-    {{-- FORM TERHUBUNG KE BACKEND --}}
+    {{-- FORM --}}
     <form
         id="formSurat"
         method="POST"
-        action="{{ route('warga.kependudukan.store', ['jenis' => $jenis]) }}"
+        action="{{ $actionForm }}"
         enctype="multipart/form-data"
     >
         @csrf
 
-        {{-- TAHAP 1 --}}
+        @if($isEdit)
+            @method('PUT')
+        @endif
+
+        {{-- TAHAP 1: DATA PEMOHON --}}
         <div class="form-step active" data-step="0">
             <section class="card">
-
                 <h2 class="form-section-title">
                     1. Data Pemohon
                 </h2>
@@ -506,18 +644,16 @@
                         id="nama_pemohon"
                         name="nama_pemohon"
                         type="text"
-                        value="{{ old('nama_pemohon') }}"
-                        placeholder="Masukkan nama lengkap sesuai dokumen kependudukan"
+                        value="{{ $nilaiPemohon('nama_pemohon') }}"
+                        placeholder="Masukkan nama sesuai dokumen"
                         maxlength="255"
                         required
                     >
 
                     <p class="help-text">
-                        Isi nama orang yang membutuhkan surat.
                         Bisa untuk diri sendiri atau anggota keluarga.
                     </p>
                 </div>
-
 
                 <div class="form-group">
                     <label class="form-label" for="email_pemohon">
@@ -546,7 +682,7 @@
                         inputmode="numeric"
                         maxlength="16"
                         pattern="[0-9]{16}"
-                        value="{{ old('nik', $user?->nik ?? '') }}"
+                        value="{{ $nilaiPemohon('nik', $user?->nik ?? '') }}"
                         placeholder="Masukkan 16 digit NIK"
                         required
                     >
@@ -565,7 +701,7 @@
                         inputmode="numeric"
                         maxlength="16"
                         pattern="[0-9]{16}"
-                        value="{{ old('nomor_kk') }}"
+                        value="{{ $nilaiPemohon('nomor_kk') }}"
                         placeholder="Masukkan nomor KK"
                     >
                 </div>
@@ -580,7 +716,8 @@
                         id="tempat_lahir"
                         name="tempat_lahir"
                         type="text"
-                        value="{{ old('tempat_lahir') }}"
+                        value="{{ $nilaiPemohon('tempat_lahir') }}"
+                        maxlength="255"
                         required
                     >
                 </div>
@@ -595,7 +732,7 @@
                         id="tanggal_lahir"
                         name="tanggal_lahir"
                         type="date"
-                        value="{{ old('tanggal_lahir') }}"
+                        value="{{ $nilaiPemohon('tanggal_lahir') }}"
                         max="{{ date('Y-m-d') }}"
                         required
                     >
@@ -614,19 +751,14 @@
                     >
                         <option value="">-- Pilih --</option>
 
-                        <option
-                            value="Laki-laki"
-                            @selected(old('jenis_kelamin') === 'Laki-laki')
-                        >
-                            Laki-laki
-                        </option>
-
-                        <option
-                            value="Perempuan"
-                            @selected(old('jenis_kelamin') === 'Perempuan')
-                        >
-                            Perempuan
-                        </option>
+                        @foreach(['Laki-laki', 'Perempuan'] as $kelamin)
+                            <option
+                                value="{{ $kelamin }}"
+                                @selected($nilaiPemohon('jenis_kelamin') === $kelamin)
+                            >
+                                {{ $kelamin }}
+                            </option>
+                        @endforeach
                     </select>
                 </div>
 
@@ -640,8 +772,9 @@
                         id="alamat"
                         name="alamat"
                         placeholder="Alamat lengkap sesuai KK"
+                        maxlength="2000"
                         required
-                    >{{ old('alamat', $user?->alamat ?? '') }}</textarea>
+                    >{{ $nilaiPemohon('alamat', $user?->alamat ?? '') }}</textarea>
                 </div>
 
                 <div class="form-group">
@@ -653,7 +786,8 @@
                         id="rt_pemohon"
                         name="rt_pemohon"
                         type="text"
-                        value="{{ old('rt_pemohon') }}"
+                        maxlength="10"
+                        value="{{ $nilaiPemohon('rt_pemohon') }}"
                         required
                     >
                 </div>
@@ -667,7 +801,8 @@
                         id="rw_pemohon"
                         name="rw_pemohon"
                         type="text"
-                        value="{{ old('rw_pemohon') }}"
+                        maxlength="10"
+                        value="{{ $nilaiPemohon('rw_pemohon') }}"
                         required
                     >
                 </div>
@@ -681,7 +816,8 @@
                         id="dusun_pemohon"
                         name="dusun_pemohon"
                         type="text"
-                        value="{{ old('dusun_pemohon') }}"
+                        maxlength="255"
+                        value="{{ $nilaiPemohon('dusun_pemohon') }}"
                         required
                     >
                 </div>
@@ -696,7 +832,8 @@
                         id="pekerjaan"
                         name="pekerjaan"
                         type="text"
-                        value="{{ old('pekerjaan') }}"
+                        maxlength="255"
+                        value="{{ $nilaiPemohon('pekerjaan') }}"
                     >
                 </div>
 
@@ -720,7 +857,7 @@
                         ] as $status)
                             <option
                                 value="{{ $status }}"
-                                @selected(old('status_perkawinan') === $status)
+                                @selected($nilaiPemohon('status_perkawinan') === $status)
                             >
                                 {{ $status }}
                             </option>
@@ -738,20 +875,18 @@
                         id="nomor_hp"
                         name="nomor_hp"
                         type="tel"
-                        value="{{ old('nomor_hp', $user?->telepon ?? '') }}"
+                        value="{{ $nilaiPemohon('nomor_hp', $user?->telepon ?? '') }}"
                         placeholder="08xxxxxxxxxx"
                         pattern="08[0-9]{8,13}"
                         required
                     >
                 </div>
-
             </section>
         </div>
 
-        {{-- TAHAP 2 --}}
+        {{-- TAHAP 2: DATA KHUSUS SURAT --}}
         <div class="form-step" data-step="1">
             <section class="card">
-
                 <h2 class="form-section-title">
                     2. Data Khusus Surat
                 </h2>
@@ -762,7 +897,6 @@
                 </p>
 
                 @forelse($fields as $index => $field)
-
                     @php
                         $fieldKey = $field['key'] ?? 'field_' . $index;
                         $label = $field['label'] ?? $fieldKey;
@@ -776,18 +910,21 @@
                         $columns = $field['columns'] ?? [];
 
                         $inputId = 'field_' . $index;
-                        $nilaiLama = old('data.' . $fieldKey);
+
+                        $nilaiLama = old(
+                            'data.' . $fieldKey,
+                            $dataSuratLama[$fieldKey] ?? null
+                        );
                     @endphp
 
                     <div
                         class="form-group conditional-item"
-                        data-columns="{{ json_encode($columns) }}"
+                        data-columns='@json($columns)'
                         @if($kondisi)
-                            data-when-key="{{ $kondisi['key'] }}"
-                            data-when-values="{{ json_encode($kondisi['in'] ?? []) }}"
+                            data-when-key="{{ $kondisi['key'] ?? '' }}"
+                            data-when-values='@json($kondisi['in'] ?? [])'
                         @endif
                     >
-
                         <label
                             class="form-label"
                             for="{{ $inputId }}"
@@ -807,7 +944,7 @@
                                 class="repeat-container"
                                 data-base-name="data[{{ $fieldKey }}]"
                                 data-required="{{ $wajib ? '1' : '0' }}"
-                                data-old-rows="{{ json_encode(is_array($nilaiLama) ? $nilaiLama : []) }}"
+                                data-old-rows='@json(is_array($nilaiLama) ? $nilaiLama : [])'
                             >
                                 <div class="repeat-list"></div>
 
@@ -826,6 +963,7 @@
                                 name="data[{{ $fieldKey }}]"
                                 data-field-key="{{ $fieldKey }}"
                                 data-required="{{ $wajib ? '1' : '0' }}"
+                                maxlength="5000"
                                 placeholder="Isi {{ strtolower($label) }}"
                             >{{ is_scalar($nilaiLama) ? $nilaiLama : '' }}</textarea>
 
@@ -844,7 +982,7 @@
                                 @foreach($pilihan as $option)
                                     <option
                                         value="{{ $option }}"
-                                        @selected($nilaiLama === $option)
+                                        @selected($nilaiLama == $option)
                                     >
                                         {{ $option }}
                                     </option>
@@ -856,12 +994,12 @@
                             <input
                                 id="{{ $inputId }}"
                                 name="data[{{ $fieldKey }}]"
-                                type="{{ in_array($tipe, ['text','number','date','email','tel']) ? $tipe : 'text' }}"
+                                type="{{ in_array($tipe, ['text', 'number', 'date', 'email', 'tel']) ? $tipe : 'text' }}"
                                 data-field-key="{{ $fieldKey }}"
                                 data-required="{{ $wajib ? '1' : '0' }}"
                                 value="{{ is_scalar($nilaiLama) ? $nilaiLama : '' }}"
                                 placeholder="{{ $label }}"
-                                @if($tipe === 'number') min="0" @endif
+                                @if($tipe === 'number') min="0" step="1" @endif
                             >
 
                         @endif
@@ -871,24 +1009,19 @@
                                 {{ $field['help'] }}
                             </p>
                         @endif
-
                     </div>
 
                 @empty
-
                     <p class="muted">
                         Pertanyaan khusus surat belum tersedia.
                     </p>
-
                 @endforelse
-
             </section>
         </div>
 
-        {{-- TAHAP 3 --}}
+        {{-- TAHAP 3: UPLOAD DOKUMEN --}}
         <div class="form-step" data-step="2">
             <section class="card">
-
                 <h2 class="form-section-title">
                     3. Upload Dokumen Persyaratan
                 </h2>
@@ -899,8 +1032,18 @@
                     Maksimal 5 MB setiap file.
                 </p>
 
-                @forelse($uploads as $index => $dokumen)
+                @if($isEdit)
+                    <div class="form-notice">
+                        <strong>Dokumen Pengajuan Sebelumnya</strong>
+                        <p>
+                            Dokumen yang sudah tersimpan tidak perlu
+                            diunggah ulang. Pilih file baru hanya
+                            jika ingin mengganti dokumen tersebut.
+                        </p>
+                    </div>
+                @endif
 
+                @forelse($uploads as $index => $dokumen)
                     @php
                         $kodeDokumen = $dokumen['key']
                             ?? 'dokumen_' . $index;
@@ -911,21 +1054,25 @@
                         $wajibDokumen = (bool) ($dokumen['required'] ?? false);
 
                         $kondisiDokumen = $dokumen['when'] ?? null;
+
+                        $sudahAdaDokumen = $isEdit
+                            && !empty($dokumenLama[$kodeDokumen]);
+
+                        $wajibUploadBaru = $wajibDokumen && !$sudahAdaDokumen;
                     @endphp
 
                     <div
                         class="upload-box conditional-item"
                         @if($kondisiDokumen)
-                            data-when-key="{{ $kondisiDokumen['key'] }}"
-                            data-when-values="{{ json_encode($kondisiDokumen['in'] ?? []) }}"
+                            data-when-key="{{ $kondisiDokumen['key'] ?? '' }}"
+                            data-when-values='@json($kondisiDokumen['in'] ?? [])'
                         @endif
                     >
-
                         <label
                             class="form-label"
                             for="dokumen_{{ $index }}"
                         >
-                            📎 {{ $namaDokumen }}
+                            {{ $namaDokumen }}
 
                             @if($wajibDokumen)
                                 <span class="required-mark">*</span>
@@ -934,38 +1081,53 @@
                             @endif
                         </label>
 
+                        @if($sudahAdaDokumen)
+                            <div
+                                class="upload-existing"
+                                data-existing-document="1"
+                            >
+                                <strong>
+                                    ✓ Dokumen sudah tersimpan
+                                </strong>
+
+                                Dokumen sebelumnya akan digunakan
+                                kembali jika tidak diganti.
+                            </div>
+                        @endif
+
                         <input
                             id="dokumen_{{ $index }}"
                             type="file"
                             name="dokumen[{{ $kodeDokumen }}]"
                             accept=".jpg,.jpeg,.png,.pdf"
-                            data-required="{{ $wajibDokumen ? '1' : '0' }}"
+                            data-required="{{ $wajibUploadBaru ? '1' : '0' }}"
+                            @if($wajibUploadBaru) required @endif
                         >
 
                         <p class="help-text">
-                            Pastikan dokumen jelas dan dapat dibaca.
+                            @if($sudahAdaDokumen)
+                                Opsional: pilih file baru untuk
+                                mengganti dokumen sebelumnya.
+                            @else
+                                Pastikan dokumen jelas dan dapat dibaca.
+                            @endif
                         </p>
 
                         <div class="file-preview"></div>
-
                     </div>
 
                 @empty
-
                     <p class="muted">
                         Belum ada persyaratan dokumen
                         untuk layanan ini.
                     </p>
-
                 @endforelse
-
             </section>
         </div>
 
-        {{-- TAHAP 4 --}}
+        {{-- TAHAP 4: KONFIRMASI --}}
         <div class="form-step" data-step="3">
             <section class="card">
-
                 <h2 class="form-section-title">
                     4. Konfirmasi Pengajuan
                 </h2>
@@ -974,6 +1136,20 @@
                     Periksa kembali seluruh data
                     sebelum mengirim pengajuan.
                 </p>
+
+                @if($isEdit)
+                    <div class="form-notice">
+                        <strong>
+                            Pengiriman Ulang Pengajuan
+                        </strong>
+
+                        <p>
+                            Nomor pengajuan tidak berubah.
+                            Setelah dikirim ulang, status akan
+                            kembali menjadi Dalam Antrian.
+                        </p>
+                    </div>
+                @endif
 
                 <div
                     id="ringkasanForm"
@@ -992,9 +1168,7 @@
                     >
 
                     <div class="checkbox-content">
-                        <strong>
-                            Pernyataan Persetujuan
-                        </strong>
+                        <strong>Pernyataan Persetujuan</strong>
 
                         <p>
                             Saya menyatakan seluruh data
@@ -1004,13 +1178,11 @@
                         </p>
                     </div>
                 </label>
-
             </section>
         </div>
 
-        {{-- TOMBOL NAVIGASI --}}
+        {{-- NAVIGASI --}}
         <div class="form-actions">
-
             <button
                 type="button"
                 class="btn-form btn-back"
@@ -1027,9 +1199,7 @@
             >
                 Selanjutnya →
             </button>
-
         </div>
-
     </form>
 </div>
 
@@ -1043,18 +1213,22 @@
     aria-hidden="true"
 >
     <div class="desara-modal-content">
-
-        <div class="desara-modal-icon">
-            📋
-        </div>
+        <div class="desara-modal-icon">📋</div>
 
         <h2 id="judulModal">
-            Konfirmasi Pengajuan
+            {{ $isEdit
+                ? 'Konfirmasi Perbaikan Pengajuan'
+                : 'Konfirmasi Pengajuan' }}
         </h2>
 
         <p>
-            Apakah kamu yakin seluruh data
-            dan dokumen yang diunggah sudah benar?
+            @if($isEdit)
+                Apakah kamu yakin semua perbaikan
+                sudah sesuai dengan permintaan petugas?
+            @else
+                Apakah kamu yakin seluruh data
+                dan dokumen sudah benar?
+            @endif
         </p>
 
         <p>
@@ -1063,7 +1237,6 @@
         </p>
 
         <div class="desara-modal-actions">
-
             <button
                 type="button"
                 class="desara-modal-cancel"
@@ -1077,11 +1250,9 @@
                 class="desara-modal-confirm"
                 id="btnYakinKirim"
             >
-                Ya, Kirim
+                {{ $isEdit ? 'Ya, Kirim Ulang' : 'Ya, Kirim' }}
             </button>
-
         </div>
-
     </div>
 </div>
 
@@ -1089,6 +1260,10 @@
 document.addEventListener('DOMContentLoaded', function () {
 
     const form = document.getElementById('formSurat');
+
+    if (!form) return;
+
+    const isEdit = @json($isEdit);
 
     const steps = Array.from(
         form.querySelectorAll('.form-step')
@@ -1116,7 +1291,10 @@ document.addEventListener('DOMContentLoaded', function () {
     let tahapAktif = 0;
     let sedangMengirim = false;
 
-    // MEMBUAT SATU BARIS ANGGOTA KELUARGA
+    // =====================================================
+    // 1. MEMBUAT BARIS ANGGOTA KELUARGA
+    // =====================================================
+
     function tambahAnggota(container, dataAwal = {}) {
 
         const list = container.querySelector('.repeat-list');
@@ -1147,7 +1325,7 @@ document.addEventListener('DOMContentLoaded', function () {
         heading.append(title, hapus);
         row.appendChild(heading);
 
-        Object.entries(columns).forEach(function([key, label]) {
+        Object.entries(columns).forEach(function ([key, label]) {
 
             const wrapper = document.createElement('div');
             wrapper.className = 'repeat-field';
@@ -1157,8 +1335,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const input = document.createElement('input');
             input.type = 'text';
+
             input.dataset.column = key;
             input.dataset.required = '1';
+
             input.placeholder = 'Isi ' + label;
             input.value = dataAwal[key] ?? '';
 
@@ -1195,18 +1375,21 @@ document.addEventListener('DOMContentLoaded', function () {
         perbaruiKondisi();
     }
 
-    // MENGURUTKAN INPUT ANGGOTA
+    // =====================================================
+    // 2. MENGURUTKAN INPUT ANGGOTA
+    // =====================================================
+
     function urutkanAnggota(container) {
 
         const rows = container.querySelectorAll('.repeat-row');
         const baseName = container.dataset.baseName;
 
-        rows.forEach(function(row, index) {
+        rows.forEach(function (row, index) {
 
             row.querySelector('.repeat-heading strong')
                 .textContent = 'Anggota Keluarga ' + (index + 1);
 
-            row.querySelectorAll('input').forEach(function(input) {
+            row.querySelectorAll('input').forEach(function (input) {
 
                 input.name = baseName +
                     '[' + index + '][' +
@@ -1215,11 +1398,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // CEK PERTANYAAN DAN DOKUMEN BERSYARAT
+    // =====================================================
+    // 3. KONDISI PERTANYAAN DAN DOKUMEN
+    // =====================================================
+
     function perbaruiKondisi() {
 
         form.querySelectorAll('.conditional-item')
-            .forEach(function(item) {
+            .forEach(function (item) {
 
                 const whenKey = item.dataset.whenKey;
                 let tampil = true;
@@ -1228,7 +1414,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const sumber = Array.from(
                         form.querySelectorAll('[data-field-key]')
-                    ).find(function(input) {
+                    ).find(function (input) {
                         return input.dataset.fieldKey === whenKey;
                     });
 
@@ -1252,7 +1438,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 item.querySelectorAll(
                     'input, select, textarea, button'
-                ).forEach(function(input) {
+                ).forEach(function (input) {
 
                     input.disabled = !tampil;
 
@@ -1261,17 +1447,20 @@ document.addEventListener('DOMContentLoaded', function () {
                             'input:not([type="button"]), select, textarea'
                         )
                     ) {
-                        input.required = tampil &&
-                            input.dataset.required === '1';
+                        input.required = tampil
+                            && input.dataset.required === '1';
                     }
                 });
             });
     }
 
-    // TAMPILKAN TAHAP
+    // =====================================================
+    // 4. TAMPILKAN TAHAP
+    // =====================================================
+
     function tampilkanTahap() {
 
-        steps.forEach(function(step, index) {
+        steps.forEach(function (step, index) {
 
             step.classList.toggle(
                 'active',
@@ -1279,7 +1468,7 @@ document.addEventListener('DOMContentLoaded', function () {
             );
         });
 
-        indikator.forEach(function(item, index) {
+        indikator.forEach(function (item, index) {
 
             item.classList.toggle(
                 'active',
@@ -1297,7 +1486,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         btnSelanjutnya.textContent =
             tahapAktif === steps.length - 1
-                ? 'Kirim Pengajuan →'
+                ? (isEdit ? 'Kirim Ulang Pengajuan →' : 'Kirim Pengajuan →')
                 : 'Selanjutnya →';
 
         if (tahapAktif === steps.length - 1) {
@@ -1305,7 +1494,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // VALIDASI TAHAP TERTENTU
+    // =====================================================
+    // 5. VALIDASI TAHAP
+    // =====================================================
+
     function validasiTahap(index) {
 
         perbaruiKondisi();
@@ -1356,7 +1548,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 tampilkanTahap();
 
                 input.reportValidity();
-
                 return false;
             }
         }
@@ -1364,7 +1555,10 @@ document.addEventListener('DOMContentLoaded', function () {
         return true;
     }
 
-    // TAMBAHKAN ITEM KE RINGKASAN
+    // =====================================================
+    // 6. MEMBUAT RINGKASAN FORMULIR
+    // =====================================================
+
     function buatRingkasan() {
 
         const ringkasan =
@@ -1389,7 +1583,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         form.querySelectorAll(
             'input:not([type="checkbox"]), select, textarea'
-        ).forEach(function(input) {
+        ).forEach(function (input) {
 
             if (input.disabled) return;
             if (input.closest('.repeat-row')) return;
@@ -1399,13 +1593,28 @@ document.addEventListener('DOMContentLoaded', function () {
             );
 
             const label = container?.querySelector('label');
+
             if (!label) return;
 
-            const nilai = input.type === 'file'
-                ? Array.from(input.files)
+            let nilai = '';
+
+            if (input.type === 'file') {
+
+                nilai = Array.from(input.files)
                     .map(file => file.name)
-                    .join(', ')
-                : input.value;
+                    .join(', ');
+
+                if (
+                    !nilai &&
+                    input.closest('.upload-box')
+                        ?.querySelector('[data-existing-document]')
+                ) {
+                    nilai = 'Menggunakan dokumen sebelumnya';
+                }
+
+            } else {
+                nilai = input.value;
+            }
 
             tambahItem(
                 label.textContent.trim(),
@@ -1414,7 +1623,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         form.querySelectorAll('.repeat-container')
-            .forEach(function(container) {
+            .forEach(function (container) {
 
                 if (
                     container.closest('.conditional-item')?.hidden
@@ -1423,10 +1632,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 container.querySelectorAll('.repeat-row')
-                    .forEach(function(row, index) {
+                    .forEach(function (row, index) {
 
                         row.querySelectorAll('input')
-                            .forEach(function(input) {
+                            .forEach(function (input) {
 
                                 if (input.disabled) return;
 
@@ -1444,7 +1653,10 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
-    // MENAMPILKAN NAMA FILE
+    // =====================================================
+    // 7. PREVIEW NAMA FILE
+    // =====================================================
+
     function tampilkanFile(input) {
 
         const preview = input.closest('.upload-box')
@@ -1454,17 +1666,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const file = input.files[0];
 
-        preview.textContent = file
-            ? 'File dipilih: ' + file.name
-            : 'Belum ada file dipilih';
+        if (file) {
+            preview.textContent = 'File baru dipilih: ' + file.name;
+        } else {
+            const adaDokumenLama = !!input.closest('.upload-box')
+                ?.querySelector('[data-existing-document]');
+
+            preview.textContent = adaDokumenLama
+                ? 'Menggunakan dokumen sebelumnya'
+                : 'Belum ada file dipilih';
+        }
     }
 
-    // VALIDASI SELURUH FORM
+    // =====================================================
+    // 8. VALIDASI SEMUA TAHAP
+    // =====================================================
+
     function validasiSemuaTahap() {
 
         for (let i = 0; i < steps.length; i++) {
 
             if (!validasiTahap(i)) {
+
                 window.scrollTo({
                     top: 0,
                     behavior: 'smooth'
@@ -1477,27 +1700,26 @@ document.addEventListener('DOMContentLoaded', function () {
         return true;
     }
 
-    // BUKA POPUP KONFIRMASI
+    // =====================================================
+    // 9. POPUP KONFIRMASI
+    // =====================================================
+
     function bukaModal() {
 
-        if (!validasiSemuaTahap()) {
-            return;
-        }
+        if (!validasiSemuaTahap()) return;
 
         tahapAktif = steps.length - 1;
         tampilkanTahap();
 
         modal.classList.add('show');
         modal.setAttribute('aria-hidden', 'false');
+
         btnBatalKirim.focus();
     }
 
-    // TUTUP POPUP
     function tutupModal() {
 
-        if (sedangMengirim) {
-            return;
-        }
+        if (sedangMengirim) return;
 
         modal.classList.remove('show');
         modal.setAttribute('aria-hidden', 'true');
@@ -1505,15 +1727,24 @@ document.addEventListener('DOMContentLoaded', function () {
         btnSelanjutnya.focus();
     }
 
-    // PINDAH TAHAP
+    // =====================================================
+    // 10. PINDAH TAHAP
+    // =====================================================
+
     function ubahTahap(arah) {
 
-        if (arah > 0 && tahapAktif === steps.length - 1) {
+        if (
+            arah > 0 &&
+            tahapAktif === steps.length - 1
+        ) {
             bukaModal();
             return;
         }
 
-        if (arah > 0 && !validasiTahap(tahapAktif)) {
+        if (
+            arah > 0 &&
+            !validasiTahap(tahapAktif)
+        ) {
             return;
         }
 
@@ -1533,9 +1764,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // INISIALISASI ANGGOTA KELUARGA
+    // =====================================================
+    // 11. INISIALISASI ANGGOTA KELUARGA
+    // =====================================================
+
     form.querySelectorAll('.repeat-container')
-        .forEach(function(container) {
+        .forEach(function (container) {
 
             let dataLama = [];
 
@@ -1554,19 +1788,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 tambahAnggota(container);
             } else {
 
-                dataLama.forEach(function(data) {
+                dataLama.forEach(function (data) {
                     tambahAnggota(container, data);
                 });
             }
 
             container.querySelector('.btn-tambah-anggota')
-                .addEventListener('click', function() {
+                .addEventListener('click', function () {
                     tambahAnggota(container);
                 });
         });
 
-    // EVENT INPUT
-    form.addEventListener('change', function(event) {
+    // =====================================================
+    // 12. EVENT PERUBAHAN INPUT
+    // =====================================================
+
+    form.addEventListener('change', function (event) {
 
         perbaruiKondisi();
 
@@ -1577,22 +1814,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
     form.addEventListener('input', perbaruiKondisi);
 
-    // EVENT TOMBOL
-    btnSebelumnya.addEventListener('click', function() {
+    // =====================================================
+    // 13. EVENT NAVIGASI
+    // =====================================================
+
+    btnSebelumnya.addEventListener('click', function () {
         ubahTahap(-1);
     });
 
-    btnSelanjutnya.addEventListener('click', function() {
+    btnSelanjutnya.addEventListener('click', function () {
         ubahTahap(1);
     });
 
     btnBatalKirim.addEventListener('click', tutupModal);
 
-    btnYakinKirim.addEventListener('click', function() {
+    btnYakinKirim.addEventListener('click', function () {
 
-        if (sedangMengirim) {
-            return;
-        }
+        if (sedangMengirim) return;
 
         if (!validasiSemuaTahap()) {
 
@@ -1604,20 +1842,22 @@ document.addEventListener('DOMContentLoaded', function () {
         sedangMengirim = true;
 
         btnYakinKirim.disabled = true;
-        btnYakinKirim.textContent = 'Mengirim...';
 
-        // Mengirim data ke controller Laravel.
+        btnYakinKirim.textContent = isEdit
+            ? 'Mengirim Ulang...'
+            : 'Mengirim...';
+
         HTMLFormElement.prototype.submit.call(form);
     });
 
-    modal.addEventListener('click', function(event) {
+    modal.addEventListener('click', function (event) {
 
         if (event.target === modal) {
             tutupModal();
         }
     });
 
-    document.addEventListener('keydown', function(event) {
+    document.addEventListener('keydown', function (event) {
 
         if (
             event.key === 'Escape' &&
@@ -1627,7 +1867,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // TAHAP AWAL
+    // =====================================================
+    // 14. TAHAP AWAL
+    // =====================================================
+
     perbaruiKondisi();
     tampilkanTahap();
 

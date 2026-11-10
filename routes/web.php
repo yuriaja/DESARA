@@ -9,6 +9,7 @@ use App\Http\Controllers\PengajuanKependudukanController;
 use App\Http\Controllers\RiwayatKependudukanController;
 use App\Http\Controllers\ProfilController;
 use App\Http\Controllers\AdministrasiKependudukanController;
+use App\Http\Controllers\PerbaikanKependudukanController;
 
 /*
 |--------------------------------------------------------------------------
@@ -350,6 +351,16 @@ Route::middleware('auth')->group(function () {
         '/admin/kependudukan',
         [RiwayatKependudukanController::class, 'adminIndex']
     )->name('admin.kependudukan.index');
+
+    Route::get(
+        '/warga/pengajuan/{pengajuan}/perbaiki',
+        [PerbaikanKependudukanController::class, 'edit']
+    )->name('warga.kependudukan.edit');
+
+    Route::put(
+        '/warga/pengajuan/{pengajuan}/perbaiki',
+        [PerbaikanKependudukanController::class, 'update']
+    )->name('warga.kependudukan.update');
 
 });
 

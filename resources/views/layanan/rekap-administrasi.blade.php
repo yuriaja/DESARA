@@ -640,11 +640,16 @@
                                                     value="selesaikan"
                                                 >
 
+                                                
+                                                {{-- SETUJUI SIAP CETAK --}}
                                                 <button
-                                                    type="submit"
-                                                    class="rekap-action-btn rekap-approve"
-                                                    title="Setujui, surat siap cetak"
-                                                    aria-label="Setujui surat {{ $p->id }} sebagai siap cetak"
+                                                    type="button"
+                                                    class="rekap-action-btn rekap-approve buka-persetujuan"
+                                                    data-url="{{ route('petugas.administrasi.keputusan', $p->id) }}"
+                                                    data-nama="{{ $namaPemohon }}"
+                                                    data-surat="{{ $p->jenis_surat }}"
+                                                    title="Periksa dan selesaikan surat"
+                                                    aria-label="Setujui surat {{ $p->id }}"
                                                 >
                                                     ✓
                                                 </button>
@@ -709,6 +714,166 @@
         </div>
 
     @endforelse
+
+
+{{-- POPUP 1: KONFIRMASI KESESUAIAN --}}
+<div
+    class="rekap-modal-overlay"
+    id="modalKonfirmasiSesuai"
+    aria-hidden="true"
+>
+    <div
+        class="rekap-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="judulKonfirmasiSesuai"
+    >
+        <h2 id="judulKonfirmasiSesuai">
+            Konfirmasi Kesesuaian Surat
+        </h2>
+
+        <p>
+            Pastikan seluruh data pemohon dan
+            dokumen persyaratan telah diperiksa.
+        </p>
+
+        <div style="
+            padding:15px;
+            background:#edf6ee;
+            border-radius:10px;
+            color:#173e30;
+            margin:16px 0;
+            line-height:1.7;
+        ">
+            <strong>Nama Pemohon:</strong>
+            <div id="konfirmasiNamaPemohon">-</div>
+
+            <strong>Jenis Surat:</strong>
+            <div id="konfirmasiJenisSurat">-</div>
+        </div>
+
+        <p style="font-weight:600;color:#173e30;">
+            Apakah seluruh data dan dokumen
+            benar-benar sudah sesuai?
+        </p>
+
+        <div class="rekap-modal-actions">
+            <button
+                type="button"
+                class="rekap-modal-btn cancel"
+                id="batalKonfirmasiSesuai"
+            >
+                Batal
+            </button>
+
+            <button
+                type="button"
+                class="rekap-modal-btn"
+                id="lanjutIdentitasSurat"
+                style="background:#206b4c;color:white;"
+            >
+                Ya, Sudah Sesuai
+            </button>
+        </div>
+    </div>
+</div>
+
+{{-- POPUP 2: PENGISIAN NOMOR SURAT DAN KEPALA DESA --}}
+<div
+    class="rekap-modal-overlay"
+    id="modalIdentitasSurat"
+    aria-hidden="true"
+>
+    <div
+        class="rekap-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="judulIdentitasSurat"
+    >
+        <h2 id="judulIdentitasSurat">
+            Lengkapi Identitas Surat
+        </h2>
+
+        <p>
+            Masukkan nomor surat resmi dan
+            nama kepala desa yang akan tercetak
+            pada dokumen PDF.
+        </p>
+
+        <form
+            id="formSelesaikanSurat"
+            method="POST"
+        >
+            @csrf
+            @method('PATCH')
+
+            <input
+                type="hidden"
+                name="aksi"
+                value="selesaikan"
+            >
+
+            <div style="margin-bottom:18px;">
+                <label
+                    for="nomorSuratFinal"
+                    style="display:block;font-weight:600;margin-bottom:8px;"
+                >
+                    Nomor Surat *
+                </label>
+
+                <input
+                    id="nomorSuratFinal"
+                    name="nomor_surat"
+                    type="text"
+                    maxlength="100"
+                    placeholder="Masukkan nomor surat sesuai register desa"
+                    autocomplete="off"
+                    required
+                    style="width:100%;padding:12px;"
+                >
+            </div>
+
+            <div style="margin-bottom:18px;">
+                <label
+                    for="namaKepalaDesaFinal"
+                    style="display:block;font-weight:600;margin-bottom:8px;"
+                >
+                    Nama Kepala Desa *
+                </label>
+
+                <input
+                    id="namaKepalaDesaFinal"
+                    name="nama_kepala_desa"
+                    type="text"
+                    maxlength="150"
+                    placeholder="Masukkan nama lengkap kepala desa"
+                    autocomplete="off"
+                    required
+                    style="width:100%;padding:12px;"
+                >
+            </div>
+
+            <div class="rekap-modal-actions">
+                <button
+                    type="button"
+                    class="rekap-modal-btn cancel"
+                    id="kembaliKonfirmasiSesuai"
+                >
+                    Kembali
+                </button>
+
+                <button
+                    type="submit"
+                    class="rekap-modal-btn"
+                    id="simpanIdentitasSurat"
+                    style="background:#206b4c;color:white;"
+                >
+                    Simpan & Selesaikan
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
     {{-- POPUP ALASAN PENOLAKAN --}}
     <div
@@ -849,6 +1014,109 @@ document.addEventListener('DOMContentLoaded', function () {
 
     });
 
+});
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modalKonfirmasi =
+        document.getElementById('modalKonfirmasiSesuai');
+
+    const modalIdentitas =
+        document.getElementById('modalIdentitasSurat');
+
+    const formSelesai =
+        document.getElementById('formSelesaikanSurat');
+
+    const inputNomor =
+        document.getElementById('nomorSuratFinal');
+
+    const inputKepalaDesa =
+        document.getElementById('namaKepalaDesaFinal');
+
+    let tombolAktif = null;
+
+    function tampilkanModal(modal) {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function sembunyikanModal(modal) {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function tutupSemua() {
+        sembunyikanModal(modalKonfirmasi);
+        sembunyikanModal(modalIdentitas);
+        formSelesai.reset();
+
+        if (tombolAktif) {
+            tombolAktif.focus();
+        }
+    }
+
+    document.querySelectorAll('.buka-persetujuan')
+        .forEach(function (tombol) {
+
+            tombol.addEventListener('click', function () {
+                tombolAktif = tombol;
+
+                formSelesai.reset();
+                formSelesai.action = tombol.dataset.url;
+
+                document.getElementById(
+                    'konfirmasiNamaPemohon'
+                ).textContent = tombol.dataset.nama || '-';
+
+                document.getElementById(
+                    'konfirmasiJenisSurat'
+                ).textContent = tombol.dataset.surat || '-';
+
+                tampilkanModal(modalKonfirmasi);
+            });
+        });
+
+    document.getElementById('batalKonfirmasiSesuai')
+        .addEventListener('click', tutupSemua);
+
+    document.getElementById('lanjutIdentitasSurat')
+        .addEventListener('click', function () {
+            sembunyikanModal(modalKonfirmasi);
+            tampilkanModal(modalIdentitas);
+            inputNomor.focus();
+        });
+
+    document.getElementById('kembaliKonfirmasiSesuai')
+        .addEventListener('click', function () {
+            sembunyikanModal(modalIdentitas);
+            tampilkanModal(modalKonfirmasi);
+        });
+
+    [modalKonfirmasi, modalIdentitas].forEach(function (modal) {
+        modal.addEventListener('click', function (event) {
+            if (event.target === modal) {
+                tutupSemua();
+            }
+        });
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            tutupSemua();
+        }
+    });
+
+    formSelesai.addEventListener('submit', function (event) {
+        if (
+            !inputNomor.value.trim() ||
+            !inputKepalaDesa.value.trim()
+        ) {
+            event.preventDefault();
+            alert('Nomor surat dan nama kepala desa wajib diisi.');
+        }
+    });
 });
 </script>
 
